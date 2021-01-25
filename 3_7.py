@@ -42,6 +42,8 @@ class Board:
 class Tetris(Board):
     def __init__(self, width, height):
         super().__init__(width, height)
+        self.rain_status, self.snow_status = False, False
+        self.rains, self.lines, self.snowy = [], [], []
         self.spin = 0
         self.score = 0
         self.act_figure = self.random_figure()
@@ -155,19 +157,24 @@ class Tetris(Board):
             if len(list(filter(lambda x: x[-1], self.board[i]))) == self.width:
                 bufer += 1
                 coord.append(i)
-        slow = {1: ['Crash!', 70, 100, 100], 2: ['Big crash', 80, 100, 300], 3: ['Woow!!!', 90, 100, 500],
-                4: ['АААА, ЧТО ТУТ ПРОИСХОДИТ?!?!', 120, 100, 1000]}
+        slow = {1: ['Crash!', 70, 100, 100, 1], 2: ['Big crash', 80, 100, 300, 5], 3: ['Woow!!!', 90, 100, 500, 6],
+                4: ['АААА, ЧТО ТУТ ПРОИСХОДИТ?!?!', 120, 100, 1000, 12]}
         if bufer:
             self.score += slow[bufer][3]
             self.texts.append(slow[bufer][:3])
         for der in coord:
             self.row_down(der)
-        print(self.score)
 
     def row_down(self, y):
         for crew in range(y, 0, -1):
             for j in range(self.width):
                 self.board[crew][j] = self.board[crew - 1][j][:]
+
+    def rain(self):
+        self.rains.append([random.randrange(600), 0])
+
+    def snow(self):
+        self.snowy.append([random.randrange(600), 0])
 
 
 pygame.init()
@@ -176,8 +183,11 @@ game = Tetris(9, 15)
 running = True
 MYEVENTTYPE = pygame.USEREVENT + 1
 clock = pygame.time.Clock()
+lines = []
+h0, h, h1, h0col, hcol, h1col = 0, 0, 0, (0, 0, 200), (0, 0, 100), (0, 0, 100)
+scorer = 0
 fps = 30
-timer_num = 100000
+timer_num = 1000
 pygame.time.set_timer(MYEVENTTYPE, timer_num)
 font = pygame.font.Font(None, 50)
 game.set_pict()
@@ -200,11 +210,30 @@ while running:
                     game.spin -= 1
                     game.spin %= 4
             elif event.key == pygame.K_DOWN:
-                game.next_move()
-                pygame.time.set_timer(MYEVENTTYPE, timer_num)
+                if not game.stop_status:
+                    scorer += 1
+                else:
+                    game.next_move()
+                    pygame.time.set_timer(MYEVENTTYPE, timer_num)
+                    if timer_num != 1:
+                        timer_num -= 1
             game.set_pict()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            co = event.pos
+            if co[0] in range(300, 371) and co[1] in range(100, 131):
+                if game.rain_status:
+                    game.rain_status = False
+                else:
+                    game.rain_status = True
+            if co[0] in range(500, 571) and co[1] in range(100, 131):
+                if game.snow_status:
+                    game.snow_status = False
+                else:
+                    game.snow_status = True
         if event.type == MYEVENTTYPE and game.stop_status:
             game.next_move()
+            if timer_num != 1:
+                timer_num -= 1
         if event.type == pygame.QUIT:
             running = False
         elif not game.stop_status:
@@ -213,9 +242,16 @@ while running:
     text = font.render(f"Вы проиграли! Ваш счёт: {game.score}", True, (100, 255, 100))
     score_text = font.render(f'Ваш счёт: {game.score}', True, (255, 0, 255, 255))
     if not game.stop_status:
+        if not lines:
+            lines.append(random.choices(range(255), k=3))
         screen.blit(text, (10, 470))
     screen.blit(score_text, (300, 10))
     game.render(screen)
+    if lines:
+        if len(lines) != 600:
+            lines.append(random.choices(range(255), k=3))
+        for i in range(len(lines)):
+            pygame.draw.line(screen, lines[i], (0, i), (600, i), 1)
     if game.texts:
         deleters = []
         for k in range(len(game.texts)):
@@ -230,5 +266,58 @@ while running:
                 deleters.append(k)
         for i in deleters:
             del game.texts[i]
+    scorer = 0
+    if scorer >= 50:
+        tex = pygame.font.Font(None, 40)
+        te = tex.render('КРУТО! Но зачем...? Это конец', True, ((hcol[0] + h) % 255, (hcol[1] + h1) % 255, hcol[2]))
+        screen.blit(te, (0, h))
+        h += 2
+        if h > 10:
+            tex = pygame.font.Font(None, 40)
+            te = tex.render('Серьёзно, дальше ничего', True, ((hcol[0] + h1) % 255, (hcol[1] + h) % 255, hcol[2]))
+            screen.blit(te, (0, h1))
+            h1 += 2
+    elif scorer >= 50:
+        tex = pygame.font.Font(None, 40)
+        te = tex.render('Эй, игра окончена!', True, ((h0col[0] + h0) % 255, (h0col[1] - h0) % 255, h0col[2]))
+        screen.blit(te, (0, h0))
+        h0 += 2
+    if game.snow_status:
+        game.snow()
+        capel = ['white', 'cyan', 'gray']
+        for i in range(len(game.snowy)):
+            t = game.snowy
+            color = capel[random.randrange(3)]
+            pygame.draw.line(screen, color, t[i], (t[i][0], t[i][1] + 2), 2)
+            game.snowy[i][1] += 1
+            game.snowy[i][0] += random.randrange(-4, 4)
+        deleters1 = []
+        for i in range(len(game.rains)):
+            if game.rains[i][1] >= 600:
+                deleters1.append(i)
+        for i in deleters1:
+            del game.rains[i]
+    if game.rain_status:
+        game.rain()
+        capel = ['blue', 'cyan', 'lightblue']
+        for i in range(len(game.rains)):
+            t = game.rains
+            color = capel[random.randrange(3)]
+            pygame.draw.line(screen, color, t[i], (t[i][0], t[i][1] + 5), 2)
+            game.rains[i][1] += 10
+        deleters1 = []
+        for i in range(len(game.rains)):
+            if game.rains[i][1] >= 600:
+                deleters1.append(i)
+        for i in deleters1:
+            del game.rains[i]
+    pygame.draw.rect(screen, (0, 0, 240), (300, 100, 70, 30), 1)
+    font = pygame.font.Font(None, 30)
+    tex = font.render('Rain', True, (0, 0, 255))
+    screen.blit(tex, (310, 105))
+    pygame.draw.rect(screen, (255, 255, 255), (500, 100, 70, 30), 1)
+    font = pygame.font.Font(None, 30)
+    tex = font.render('Snow', True, (255, 255, 255))
+    screen.blit(tex, (510, 105))
     pygame.display.flip()
     clock.tick(fps)
